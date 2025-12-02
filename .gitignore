@@ -1,0 +1,35 @@
+# Python
+python/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Logs
+*.log
+start_log.txt
+
+# Temp files
+*.tmp
+*.temp
+nul
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build outputs
+*.zip
+
+# Secrets
+client_secret*.json
+
+# Test files
+*.PES
+*.pes
+*.EMB
+*.emb

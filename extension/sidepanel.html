@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PES/EMB Viewer</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">🧵</span>
+        <span class="logo-text">PES Viewer</span>
+      </div>
+      <button id="settingsBtn" class="btn-settings" title="Cài đặt">
+        ⚙️
+      </button>
+    </header>
+
+    <!-- Settings Panel (hidden by default) -->
+    <div id="settingsPanel" class="settings-panel" style="display: none;">
+      <div class="setting-group">
+        <label for="apiKeyInput">API Key:</label>
+        <input
+          type="password"
+          id="apiKeyInput"
+          class="setting-input"
+          placeholder="Nhập Google API Key"
+        >
+      </div>
+      <div class="setting-group">
+        <label>Folders (mỗi dòng 1 folder ID hoặc URL):</label>
+        <textarea
+          id="foldersInput"
+          class="setting-input folders-textarea"
+          placeholder="Paste link hoặc ID folder, mỗi dòng 1 folder"
+          rows="4"
+        ></textarea>
+      </div>
+      <button id="saveSettingsBtn" class="btn-save">Lưu cài đặt</button>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-container">
+      <div class="search-wrapper">
+        <input
+          type="text"
+          id="searchInput"
+          class="search-input"
+          placeholder="Tìm kiếm file..."
+          autocomplete="off"
+        >
+        <div id="searchSuggestions" class="search-suggestions"></div>
+      </div>
+      <button id="searchBtn" class="btn-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="M21 21l-4.35-4.35"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <span id="fileCount">Found: 0 files</span>
+      <button id="refreshBtn" class="btn-refresh" title="Refresh">🔄</button>
+    </div>
+
+    <!-- File Grid -->
+    <div id="fileGrid" class="file-grid">
+      <!-- Files will be rendered here -->
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="loading" style="display: none;">
+      <div class="spinner"></div>
+      <span>Đang tải...</span>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <div class="empty-icon">📁</div>
+      <p>Nhập từ khóa để tìm file PES/EMB</p>
+    </div>
+
+    <!-- Config Required -->
+    <div id="configRequired" class="config-required">
+      <div class="config-icon">⚙️</div>
+      <h3>Cấu hình lần đầu</h3>
+      <p>Nhấn nút ⚙️ ở góc trên để cài đặt:</p>
+      <ul>
+        <li>API Key từ Google Cloud</li>
+        <li>Link folder Google Drive</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">
+    <span id="toastMessage">Link đã được copy!</span>
+  </div>
+
+  <!-- Preview Modal -->
+  <div id="previewModal" class="preview-modal" style="display: none;">
+    <div class="preview-content">
+      <button id="closePreview" class="preview-close">&times;</button>
+      <div id="previewContainer" class="preview-container">
+        <div class="preview-loading">
+          <div class="spinner"></div>
+          <span>Đang tải...</span>
+        </div>
+      </div>
+      <div id="previewInfo" class="preview-info"></div>
+    </div>
+  </div>
+
+  <script src="js/drive-api.js"></script>
+  <script src="js/pes-parser.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

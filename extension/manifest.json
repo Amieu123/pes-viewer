@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "PES/EMB Thumbnail Viewer",
+  "version": "1.0.0",
+  "description": "View PES embroidery file thumbnails from Google Drive",
+  "permissions": [
+    "storage",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "https://drive.google.com/*",
+    "https://drive.usercontent.google.com/*",
+    "https://*.googleusercontent.com/*",
+    "http://localhost:5000/*"
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "PES Thumbnail Viewer",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  }
+}
