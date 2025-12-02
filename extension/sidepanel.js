@@ -50,7 +50,7 @@ class PESViewer {
 
   // ==================== Server Status ====================
 
-  async checkServerStatus(showToast = false) {
+  async checkServerStatus() {
     try {
       const response = await fetch(`${PESParser.SERVER_URL}/health`, {
         method: 'GET',
@@ -58,16 +58,32 @@ class PESViewer {
       });
 
       if (response.ok) {
+        const data = await response.json();
         this.serverStatus.classList.remove('disconnected');
         this.serverStatus.title = 'Server connected';
-        if (showToast) this.showToast('Server đang chạy');
+        this.serverPath.textContent = data.serverPath || 'Unknown';
       } else {
         throw new Error('Server error');
       }
     } catch (e) {
       this.serverStatus.classList.add('disconnected');
       this.serverStatus.title = 'Server disconnected';
-      if (showToast) this.showToast('Không kết nối được server');
+      this.serverPath.textContent = 'Server không chạy';
+    }
+  }
+
+  toggleServerInfo() {
+    const isVisible = this.serverInfo.style.display !== 'none';
+    this.serverInfo.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible) this.checkServerStatus();
+  }
+
+  copyPath() {
+    const path = this.serverPath.textContent;
+    if (path && path !== 'Server không chạy') {
+      navigator.clipboard.writeText(path)
+        .then(() => this.showToast('Đã copy đường dẫn!'))
+        .catch(() => this.showToast('Không thể copy'));
     }
   }
 
@@ -129,12 +145,16 @@ class PESViewer {
     this.searchSuggestions = document.getElementById('searchSuggestions');
     this.refreshBtn = document.getElementById('refreshBtn');
     this.serverStatus = document.getElementById('serverStatus');
+    this.serverInfo = document.getElementById('serverInfo');
+    this.serverPath = document.getElementById('serverPath');
+    this.copyServerPath = document.getElementById('copyServerPath');
   }
 
   bindEvents() {
     this.settingsBtn.addEventListener('click', () => this.toggleSettings());
     this.saveSettingsBtn.addEventListener('click', () => this.saveSettings());
-    this.serverStatus.addEventListener('click', () => this.checkServerStatus(true));
+    this.serverStatus.addEventListener('click', () => this.toggleServerInfo());
+    this.copyServerPath.addEventListener('click', () => this.copyPath());
     this.refreshBtn.addEventListener('click', () => this.handleRefresh());
     this.searchBtn.addEventListener('click', () => this.handleSearch());
 
@@ -146,6 +166,7 @@ class PESViewer {
 
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.search-wrapper')) this.hideSuggestions();
+      if (!e.target.closest('.server-status-wrapper')) this.serverInfo.style.display = 'none';
     });
 
     this.fileGrid.addEventListener('contextmenu', (e) => {

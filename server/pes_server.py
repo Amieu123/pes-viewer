@@ -121,7 +121,11 @@ def parse_pes():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok'})
+    server_dir = os.path.dirname(os.path.abspath(__file__))
+    return jsonify({
+        'status': 'ok',
+        'serverPath': server_dir
+    })
 
 if __name__ == '__main__':
     import threading

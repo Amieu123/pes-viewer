@@ -14,9 +14,19 @@
         <span class="logo-icon">🧵</span>
         <span class="logo-text">PES Viewer</span>
       </div>
-      <button id="settingsBtn" class="btn-settings" title="Cài đặt">
-        ⚙️
-      </button>
+      <div class="header-buttons">
+        <div class="server-status-wrapper">
+          <button id="serverStatus" class="btn-status" title="Server status">ⓘ</button>
+          <div id="serverInfo" class="server-info" style="display: none;">
+            <div class="server-info-title">Server Location</div>
+            <div class="server-info-path" id="serverPath">Loading...</div>
+            <button id="copyServerPath" class="btn-copy-path">Copy Path</button>
+          </div>
+        </div>
+        <button id="settingsBtn" class="btn-settings" title="Cài đặt">
+          ⚙️
+        </button>
+      </div>
     </header>
 
     <!-- Settings Panel (hidden by default) -->
@@ -65,7 +75,6 @@
     <!-- Stats -->
     <div class="stats">
       <span id="fileCount">Found: 0 files</span>
-      <button id="serverStatus" class="btn-status" title="Server status">ⓘ</button>
       <button id="refreshBtn" class="btn-refresh" title="Refresh">🔄</button>
     </div>
 

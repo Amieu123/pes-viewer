@@ -43,6 +43,82 @@ body {
   color: #fff;
 }
 
+/* Header Buttons */
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.server-status-wrapper {
+  position: relative;
+}
+
+.btn-status {
+  background: transparent;
+  border: 1px solid #2d2d44;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #4ade80;
+}
+
+.btn-status:hover {
+  background: #16213e;
+  border-color: #667eea;
+}
+
+.btn-status.disconnected {
+  color: #f87171;
+}
+
+.server-info {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: #16213e;
+  border: 1px solid #2d2d44;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 250px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.server-info-title {
+  font-size: 12px;
+  color: #8b8ba7;
+  margin-bottom: 6px;
+}
+
+.server-info-path {
+  font-size: 11px;
+  color: #eaeaea;
+  background: #0f0f23;
+  padding: 8px;
+  border-radius: 4px;
+  word-break: break-all;
+  margin-bottom: 8px;
+  font-family: monospace;
+}
+
+.btn-copy-path {
+  width: 100%;
+  background: #2d2d44;
+  color: #eaeaea;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-copy-path:hover {
+  background: #3d3d54;
+}
+
 /* Settings Button */
 .btn-settings {
   background: transparent;
@@ -242,24 +318,6 @@ body {
 
 .btn-refresh:hover {
   background: rgba(255,255,255,0.1);
-}
-
-.btn-status {
-  background: transparent;
-  border: none;
-  font-size: 14px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  color: #4ade80;
-}
-
-.btn-status:hover {
-  background: rgba(255,255,255,0.1);
-}
-
-.btn-status.disconnected {
-  color: #f87171;
 }
 
 /* Pagination */
