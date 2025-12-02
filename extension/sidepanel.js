@@ -43,6 +43,32 @@ class PESViewer {
     if (this.isConfigured) {
       this.loadCachedFileNames();
     }
+
+    // Check server status on init
+    this.checkServerStatus();
+  }
+
+  // ==================== Server Status ====================
+
+  async checkServerStatus(showToast = false) {
+    try {
+      const response = await fetch(`${PESParser.SERVER_URL}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(3000)
+      });
+
+      if (response.ok) {
+        this.serverStatus.classList.remove('disconnected');
+        this.serverStatus.title = 'Server connected';
+        if (showToast) this.showToast('Server đang chạy');
+      } else {
+        throw new Error('Server error');
+      }
+    } catch (e) {
+      this.serverStatus.classList.add('disconnected');
+      this.serverStatus.title = 'Server disconnected';
+      if (showToast) this.showToast('Không kết nối được server');
+    }
   }
 
   // ==================== Cache Methods ====================
@@ -102,11 +128,13 @@ class PESViewer {
     this.closePreview = document.getElementById('closePreview');
     this.searchSuggestions = document.getElementById('searchSuggestions');
     this.refreshBtn = document.getElementById('refreshBtn');
+    this.serverStatus = document.getElementById('serverStatus');
   }
 
   bindEvents() {
     this.settingsBtn.addEventListener('click', () => this.toggleSettings());
     this.saveSettingsBtn.addEventListener('click', () => this.saveSettings());
+    this.serverStatus.addEventListener('click', () => this.checkServerStatus(true));
     this.refreshBtn.addEventListener('click', () => this.handleRefresh());
     this.searchBtn.addEventListener('click', () => this.handleSearch());
 

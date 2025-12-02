@@ -244,6 +244,24 @@ body {
   background: rgba(255,255,255,0.1);
 }
 
+.btn-status {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #4ade80;
+}
+
+.btn-status:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.btn-status.disconnected {
+  color: #f87171;
+}
+
 /* Pagination */
 .pagination {
   display: flex;
