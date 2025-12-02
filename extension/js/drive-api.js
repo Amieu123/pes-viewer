@@ -155,27 +155,67 @@ class DriveAPI {
     };
   }
 
-  // Search with AND matching (all terms must be present)
+  // Search directly via API (fast, like Google Drive)
   async searchFiles(query = '') {
-    // Load files if not cached
-    if (this.allFiles.length === 0) {
-      await this.loadAllFiles();
+    if (!this.apiKey) throw new Error('API Key chưa được cấu hình');
+    if (this.folderIds.length === 0) throw new Error('Chưa có Folder ID nào');
+
+    // If no query, load all files
+    if (!query.trim()) {
+      if (this.allFiles.length === 0) {
+        await this.loadAllFiles();
+      }
+      return this.pairFiles(this.allFiles);
     }
 
-    let filteredFiles = this.allFiles;
+    // Search directly via API - much faster!
+    const results = await Promise.allSettled(
+      this.folderIds.map(folderId => this.searchInFolder(folderId, query))
+    );
 
-    // Apply search if query provided
-    if (query.trim()) {
-      const searchTerms = query.toLowerCase().trim().split(/\s+/);
+    const allFoundFiles = [];
+    results.forEach(result => {
+      if (result.status === 'fulfilled') {
+        allFoundFiles.push(...result.value);
+      }
+    });
 
-      filteredFiles = this.allFiles.filter(file => {
-        const fileName = file.name.toLowerCase();
-        // Match if ALL search terms are found in filename (AND logic)
-        return searchTerms.every(term => fileName.includes(term));
-      });
+    // Remove duplicates
+    const uniqueFiles = new Map();
+    for (const file of allFoundFiles) {
+      if (!uniqueFiles.has(file.id)) {
+        uniqueFiles.set(file.id, file);
+      }
     }
 
-    return this.pairFiles(filteredFiles);
+    return this.pairFiles(Array.from(uniqueFiles.values()));
+  }
+
+  // Search in a single folder via API
+  async searchInFolder(folderId, query) {
+    // Build query: name contains each term (AND logic)
+    const terms = query.trim().split(/\s+/);
+    const nameConditions = terms.map(term => `name contains '${term.replace(/'/g, "\\'")}'`).join(' and ');
+
+    const q = `'${folderId}' in parents and (fileExtension='pes' or fileExtension='emb') and trashed=false and ${nameConditions}`;
+
+    const params = new URLSearchParams({
+      q: q,
+      key: this.apiKey,
+      fields: 'files(id,name,size,webViewLink,modifiedTime)',
+      pageSize: '1000',
+      orderBy: 'name'
+    });
+
+    const response = await fetch(`${this.baseUrl}/files?${params}`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || `API Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.files || [];
   }
 
   // Pair PES and EMB files - show ALL files (even without pair)
