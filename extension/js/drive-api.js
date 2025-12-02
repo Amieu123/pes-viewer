@@ -1,67 +1,92 @@
-// Google Drive API Module - Using API Key (No OAuth required)
+// Google Drive API Module - API Key Version
 
 class DriveAPI {
   constructor() {
     this.apiKey = '';
-    this.folderIds = []; // Support multiple folders
+    this.folderIds = [];
     this.baseUrl = 'https://www.googleapis.com/drive/v3';
-    this.allFiles = []; // Cache all files for local filtering
+    this.allFiles = [];
   }
 
-  setApiKey(key) {
-    this.apiKey = key;
-  }
+  setApiKey(key) { this.apiKey = key; }
 
   setFolderIds(ids) {
-    this.folderIds = ids.filter(id => id && id.trim());
-    this.allFiles = []; // Clear cache when folders change
-  }
-
-  // Legacy support for single folder
-  setFolderId(id) {
-    this.setFolderIds([id]);
+    this.folderIds = ids.filter(id => id?.trim());
+    this.allFiles = [];
   }
 
   isConfigured() {
     return this.apiKey && this.folderIds.length > 0;
   }
 
-  // Load all PES and EMB files from all folders (parallel)
-  async loadAllFiles() {
-    if (!this.apiKey) throw new Error('API Key chưa được cấu hình');
-    if (this.folderIds.length === 0) throw new Error('Chưa có Folder ID nào');
+  clearCache() { this.allFiles = []; }
 
-    // Fetch all folders in parallel
+  // ==================== Search ====================
+
+  async searchFiles(query = '') {
+    if (!this.apiKey) throw new Error('API Key chưa được cấu hình');
+    if (!this.folderIds.length) throw new Error('Chưa có Folder ID nào');
+
+    // Empty query = load all files
+    if (!query.trim()) {
+      if (!this.allFiles.length) await this.loadAllFiles();
+      return this.pairFiles(this.allFiles);
+    }
+
+    // Search via API
     const results = await Promise.allSettled(
-      this.folderIds.map(folderId => this.loadFilesFromFolder(folderId))
+      this.folderIds.map(id => this.searchInFolder(id, query))
     );
 
-    // Collect all files from successful requests
-    const allFilesFromFolders = [];
-    results.forEach((result, i) => {
-      if (result.status === 'fulfilled') {
-        allFilesFromFolders.push(...result.value);
-      } else {
-        console.error(`Error loading folder ${this.folderIds[i]}:`, result.reason);
+    const files = new Map();
+    results.forEach(r => {
+      if (r.status === 'fulfilled') {
+        r.value.forEach(f => files.set(f.id, f));
       }
     });
 
-    // Remove duplicates by file ID
-    const uniqueFiles = new Map();
-    for (const file of allFilesFromFolders) {
-      if (!uniqueFiles.has(file.id)) {
-        uniqueFiles.set(file.id, file);
-      }
+    return this.pairFiles(Array.from(files.values()));
+  }
+
+  async searchInFolder(folderId, query) {
+    const terms = query.trim().split(/\s+/);
+    const nameConditions = terms.map(t => `name contains '${t.replace(/'/g, "\\'")}'`).join(' and ');
+
+    const params = new URLSearchParams({
+      q: `'${folderId}' in parents and (fileExtension='pes' or fileExtension='emb') and trashed=false and ${nameConditions}`,
+      key: this.apiKey,
+      fields: 'files(id,name,size,webViewLink,modifiedTime)',
+      pageSize: '1000',
+      orderBy: 'name'
+    });
+
+    const response = await fetch(`${this.baseUrl}/files?${params}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || `API Error: ${response.status}`);
     }
 
-    this.allFiles = Array.from(uniqueFiles.values());
-    // Sort by name
-    this.allFiles.sort((a, b) => a.name.localeCompare(b.name));
+    return (await response.json()).files || [];
+  }
 
+  // ==================== Load All Files ====================
+
+  async loadAllFiles() {
+    const results = await Promise.allSettled(
+      this.folderIds.map(id => this.loadFilesFromFolder(id))
+    );
+
+    const files = new Map();
+    results.forEach(r => {
+      if (r.status === 'fulfilled') {
+        r.value.forEach(f => files.set(f.id, f));
+      }
+    });
+
+    this.allFiles = Array.from(files.values()).sort((a, b) => a.name.localeCompare(b.name));
     return this.allFiles;
   }
 
-  // Load files from a single folder (with pagination for >1000 files)
   async loadFilesFromFolder(folderId) {
     const q = `'${folderId}' in parents and (fileExtension='pes' or fileExtension='emb') and trashed=false`;
     const allFiles = [];
@@ -69,19 +94,13 @@ class DriveAPI {
 
     do {
       const params = new URLSearchParams({
-        q: q,
-        key: this.apiKey,
+        q, key: this.apiKey,
         fields: 'nextPageToken,files(id,name,size,webViewLink,modifiedTime)',
-        pageSize: '1000',
-        orderBy: 'name'
+        pageSize: '1000', orderBy: 'name'
       });
-
-      if (pageToken) {
-        params.append('pageToken', pageToken);
-      }
+      if (pageToken) params.append('pageToken', pageToken);
 
       const response = await fetch(`${this.baseUrl}/files?${params}`);
-
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error?.message || `API Error: ${response.status}`);
@@ -95,144 +114,22 @@ class DriveAPI {
     return allFiles;
   }
 
-  // Quick check if folder has changes (lightweight request)
-  // Returns: { changed: boolean, fileCount: number, latestModified: string }
-  async checkForChanges(cachedCount, cachedLatestModified) {
-    if (!this.apiKey || this.folderIds.length === 0) return { changed: false };
+  // ==================== File Pairing ====================
 
-    try {
-      // Fetch minimal data: only id, name, modifiedTime
-      const results = await Promise.allSettled(
-        this.folderIds.map(folderId => this.getFilesSummary(folderId))
-      );
-
-      let totalCount = 0;
-      let latestModified = '';
-
-      results.forEach(result => {
-        if (result.status === 'fulfilled') {
-          totalCount += result.value.count;
-          if (result.value.latestModified > latestModified) {
-            latestModified = result.value.latestModified;
-          }
-        }
-      });
-
-      // Changed if count different or newer file exists
-      const changed = totalCount !== cachedCount || latestModified > cachedLatestModified;
-
-      return { changed, fileCount: totalCount, latestModified };
-    } catch (error) {
-      console.error('Check changes error:', error);
-      return { changed: false };
-    }
-  }
-
-  // Get summary of files in folder (minimal fields for fast response)
-  async getFilesSummary(folderId) {
-    const q = `'${folderId}' in parents and (fileExtension='pes' or fileExtension='emb') and trashed=false`;
-
-    const params = new URLSearchParams({
-      q: q,
-      key: this.apiKey,
-      fields: 'files(id,modifiedTime)',
-      pageSize: '1000',
-      orderBy: 'modifiedTime desc' // Get newest first
-    });
-
-    const response = await fetch(`${this.baseUrl}/files?${params}`);
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const files = data.files || [];
-
-    return {
-      count: files.length,
-      latestModified: files.length > 0 ? files[0].modifiedTime : ''
-    };
-  }
-
-  // Search directly via API (fast, like Google Drive)
-  async searchFiles(query = '') {
-    if (!this.apiKey) throw new Error('API Key chưa được cấu hình');
-    if (this.folderIds.length === 0) throw new Error('Chưa có Folder ID nào');
-
-    // If no query, load all files
-    if (!query.trim()) {
-      if (this.allFiles.length === 0) {
-        await this.loadAllFiles();
-      }
-      return this.pairFiles(this.allFiles);
-    }
-
-    // Search directly via API - much faster!
-    const results = await Promise.allSettled(
-      this.folderIds.map(folderId => this.searchInFolder(folderId, query))
-    );
-
-    const allFoundFiles = [];
-    results.forEach(result => {
-      if (result.status === 'fulfilled') {
-        allFoundFiles.push(...result.value);
-      }
-    });
-
-    // Remove duplicates
-    const uniqueFiles = new Map();
-    for (const file of allFoundFiles) {
-      if (!uniqueFiles.has(file.id)) {
-        uniqueFiles.set(file.id, file);
-      }
-    }
-
-    return this.pairFiles(Array.from(uniqueFiles.values()));
-  }
-
-  // Search in a single folder via API
-  async searchInFolder(folderId, query) {
-    // Build query: name contains each term (AND logic)
-    const terms = query.trim().split(/\s+/);
-    const nameConditions = terms.map(term => `name contains '${term.replace(/'/g, "\\'")}'`).join(' and ');
-
-    const q = `'${folderId}' in parents and (fileExtension='pes' or fileExtension='emb') and trashed=false and ${nameConditions}`;
-
-    const params = new URLSearchParams({
-      q: q,
-      key: this.apiKey,
-      fields: 'files(id,name,size,webViewLink,modifiedTime)',
-      pageSize: '1000',
-      orderBy: 'name'
-    });
-
-    const response = await fetch(`${this.baseUrl}/files?${params}`);
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || `API Error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.files || [];
-  }
-
-  // Pair PES and EMB files - show ALL files (even without pair)
   pairFiles(files) {
-    const fileMap = new Map();
+    const map = new Map();
 
     files.forEach(file => {
       const lastDot = file.name.lastIndexOf('.');
       const baseName = lastDot > 0 ? file.name.substring(0, lastDot) : file.name;
       const ext = lastDot > 0 ? file.name.substring(lastDot + 1).toLowerCase() : '';
 
-      if (!fileMap.has(baseName)) {
-        fileMap.set(baseName, { name: baseName, pes: null, emb: null });
+      if (!map.has(baseName)) {
+        map.set(baseName, { name: baseName, pes: null, emb: null });
       }
 
-      const pair = fileMap.get(baseName);
-      const fileInfo = {
+      const pair = map.get(baseName);
+      const info = {
         id: file.id,
         name: file.name,
         size: file.size,
@@ -240,39 +137,29 @@ class DriveAPI {
         link: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`
       };
 
-      if (ext === 'pes') {
-        pair.pes = fileInfo;
-      } else if (ext === 'emb') {
-        pair.emb = fileInfo;
-      }
+      if (ext === 'pes') pair.pes = info;
+      else if (ext === 'emb') pair.emb = info;
     });
 
-    // Return ALL files - both paired and unpaired (PES only or EMB only)
-    return Array.from(fileMap.values()).filter(pair => pair.pes !== null || pair.emb !== null);
+    return Array.from(map.values()).filter(p => p.pes || p.emb);
   }
 
-  // Download file content (for PES parsing) - uses background script to avoid CORS
+  // ==================== Download ====================
+
   async downloadFile(fileId) {
     if (!this.apiKey) throw new Error('API Key chưa được cấu hình');
 
-    // Send message to background script to download (avoids CORS)
     const response = await chrome.runtime.sendMessage({
       action: 'downloadFile',
-      fileId: fileId,
+      fileId,
       apiKey: this.apiKey
     });
 
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to download file');
-    }
-
+    if (!response.success) throw new Error(response.error || 'Download failed');
     return new Uint8Array(response.data);
   }
 
-  // Clear cache (force reload)
-  clearCache() {
-    this.allFiles = [];
-  }
+  // ==================== Utils ====================
 
   static formatSize(bytes) {
     if (!bytes) return 'N/A';
@@ -283,16 +170,9 @@ class DriveAPI {
   }
 
   static extractFolderId(input) {
-    if (/^[a-zA-Z0-9_-]+$/.test(input) && input.length > 20) {
-      return input;
-    }
-
-    const folderMatch = input.match(/folders\/([a-zA-Z0-9_-]+)/);
-    if (folderMatch) {
-      return folderMatch[1];
-    }
-
-    return input;
+    if (/^[a-zA-Z0-9_-]+$/.test(input) && input.length > 20) return input;
+    const match = input.match(/folders\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : input;
   }
 }
 
