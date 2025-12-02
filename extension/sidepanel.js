@@ -30,6 +30,9 @@ class PESViewer {
     this.allFileNames = []; // Cache all file names for suggestions
     this.selectedSuggestionIndex = -1;
     this.hasSearched = false; // Track if user has searched
+    this.isLoadingNames = false; // Prevent duplicate loading
+    this.CACHE_KEY = 'pes_file_names_cache';
+    this.CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
     this.init();
   }
@@ -39,22 +42,74 @@ class PESViewer {
     this.bindEvents();
     await this.loadSettings();
 
-    // Preload file list in background for faster fuzzy search
+    // Load cached file names instantly from localStorage (no network)
     if (this.isConfigured) {
-      this.preloadFiles();
+      this.loadCachedFileNames();
     }
   }
 
-  // Preload files in background (non-blocking)
+  // Load file names from localStorage cache (instant - no network request)
+  loadCachedFileNames() {
+    try {
+      const cached = localStorage.getItem(this.CACHE_KEY);
+      if (cached) {
+        const { names, timestamp, folderIds } = JSON.parse(cached);
+        const currentFolders = this.driveAPI.folderIds.sort().join(',');
+        const cachedFolders = (folderIds || []).sort().join(',');
+
+        // Use cache if same folders and not expired (24h)
+        if (cachedFolders === currentFolders &&
+            Date.now() - timestamp < this.CACHE_EXPIRY) {
+          this.allFileNames = names;
+          console.log(`Loaded ${names.length} file names from cache`);
+          return true;
+        }
+      }
+    } catch (e) {
+      console.error('Cache load error:', e);
+    }
+    return false;
+  }
+
+  // Save file names to localStorage for instant loading next time
+  saveCacheFileNames() {
+    try {
+      const cacheData = {
+        names: this.allFileNames,
+        timestamp: Date.now(),
+        folderIds: this.driveAPI.folderIds
+      };
+      localStorage.setItem(this.CACHE_KEY, JSON.stringify(cacheData));
+      console.log(`Cached ${this.allFileNames.length} file names`);
+    } catch (e) {
+      console.error('Cache save error:', e);
+    }
+  }
+
+  // Clear file names cache
+  clearFileNamesCache() {
+    localStorage.removeItem(this.CACHE_KEY);
+    this.allFileNames = [];
+  }
+
+  // Load file names from Drive API (only when needed)
   async preloadFiles() {
+    if (this.isLoadingNames) return;
+    this.isLoadingNames = true;
+
     try {
       await this.driveAPI.loadAllFiles();
       // Remove .pes/.emb extension from file names for suggestions
       this.allFileNames = [...new Set(this.driveAPI.allFiles.map(f =>
         f.name.replace(/\.(pes|emb)$/i, '')
       ))].sort();
+
+      // Save to localStorage for instant loading next time
+      this.saveCacheFileNames();
     } catch (error) {
       console.error('Preload error:', error);
+    } finally {
+      this.isLoadingNames = false;
     }
   }
 
@@ -186,6 +241,9 @@ class PESViewer {
       this.driveAPI.setApiKey(apiKey);
       this.driveAPI.setFolderIds(folderIds);
 
+      // Clear old cache when folders change
+      this.clearFileNamesCache();
+
       this.updateConfigUI();
       this.toggleSettings();
       this.showToast(`Đã lưu ${folderIds.length} folder!`);
@@ -242,6 +300,14 @@ class PESViewer {
         this.emptyState.style.display = 'none';
         this.renderPage();
       }
+
+      // Update file names cache after search (background)
+      if (this.allFileNames.length === 0 && this.driveAPI.allFiles.length > 0) {
+        this.allFileNames = [...new Set(this.driveAPI.allFiles.map(f =>
+          f.name.replace(/\.(pes|emb)$/i, '')
+        ))].sort();
+        this.saveCacheFileNames();
+      }
     } catch (error) {
       console.error('Search error:', error);
       this.showToast('Lỗi: ' + error.message);
@@ -250,10 +316,10 @@ class PESViewer {
     }
   }
 
-  // Refresh - clear cache and reload from Drive
+  // Refresh - clear all cache and reload from Drive
   async handleRefresh() {
     this.driveAPI.clearCache();
-    this.allFileNames = []; // Clear fuzzy search cache
+    this.clearFileNamesCache(); // Clear localStorage cache too
     this.showToast('Đang tải lại...');
     await this.handleSearch();
   }
@@ -871,6 +937,8 @@ class PESViewer {
       this.allFileNames = [...new Set(allFiles.map(f =>
         f.name.replace(/\.(pes|emb)$/i, '')
       ))].sort();
+      // Save to cache
+      this.saveCacheFileNames();
     } catch (error) {
       console.error('Error loading file names:', error);
     }
@@ -940,9 +1008,13 @@ class PESViewer {
       return;
     }
 
-    // Load file names if not loaded yet
+    // Try to load from cache first, then from API if needed
     if (this.allFileNames.length === 0 && this.isConfigured) {
-      await this.preloadFiles();
+      // Try cache first (instant)
+      if (!this.loadCachedFileNames()) {
+        // No cache, need to load from API
+        await this.preloadFiles();
+      }
     }
 
     // Show suggestions if file names are loaded
