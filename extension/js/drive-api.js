@@ -71,7 +71,7 @@ class DriveAPI {
       const params = new URLSearchParams({
         q: q,
         key: this.apiKey,
-        fields: 'nextPageToken,files(id,name,size,webViewLink,webContentLink,mimeType,createdTime,modifiedTime)',
+        fields: 'nextPageToken,files(id,name,size,webViewLink,modifiedTime)',
         pageSize: '1000',
         orderBy: 'name'
       });
@@ -93,6 +93,66 @@ class DriveAPI {
     } while (pageToken);
 
     return allFiles;
+  }
+
+  // Quick check if folder has changes (lightweight request)
+  // Returns: { changed: boolean, fileCount: number, latestModified: string }
+  async checkForChanges(cachedCount, cachedLatestModified) {
+    if (!this.apiKey || this.folderIds.length === 0) return { changed: false };
+
+    try {
+      // Fetch minimal data: only id, name, modifiedTime
+      const results = await Promise.allSettled(
+        this.folderIds.map(folderId => this.getFilesSummary(folderId))
+      );
+
+      let totalCount = 0;
+      let latestModified = '';
+
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          totalCount += result.value.count;
+          if (result.value.latestModified > latestModified) {
+            latestModified = result.value.latestModified;
+          }
+        }
+      });
+
+      // Changed if count different or newer file exists
+      const changed = totalCount !== cachedCount || latestModified > cachedLatestModified;
+
+      return { changed, fileCount: totalCount, latestModified };
+    } catch (error) {
+      console.error('Check changes error:', error);
+      return { changed: false };
+    }
+  }
+
+  // Get summary of files in folder (minimal fields for fast response)
+  async getFilesSummary(folderId) {
+    const q = `'${folderId}' in parents and (fileExtension='pes' or fileExtension='emb') and trashed=false`;
+
+    const params = new URLSearchParams({
+      q: q,
+      key: this.apiKey,
+      fields: 'files(id,modifiedTime)',
+      pageSize: '1000',
+      orderBy: 'modifiedTime desc' // Get newest first
+    });
+
+    const response = await fetch(`${this.baseUrl}/files?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const files = data.files || [];
+
+    return {
+      count: files.length,
+      latestModified: files.length > 0 ? files[0].modifiedTime : ''
+    };
   }
 
   // Search with AND matching (all terms must be present)

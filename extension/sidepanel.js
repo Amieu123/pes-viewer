@@ -32,7 +32,6 @@ class PESViewer {
     this.hasSearched = false; // Track if user has searched
     this.isLoadingNames = false; // Prevent duplicate loading
     this.CACHE_KEY = 'pes_file_names_cache';
-    this.CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
 
     this.init();
   }
@@ -42,9 +41,13 @@ class PESViewer {
     this.bindEvents();
     await this.loadSettings();
 
-    // Load cached file names instantly from localStorage (no network)
+    // Load cached file names instantly, then check for changes in background
     if (this.isConfigured) {
-      this.loadCachedFileNames();
+      const hasCache = this.loadCachedFileNames();
+      if (hasCache) {
+        // Check for changes in background (non-blocking)
+        this.checkAndUpdateCache();
+      }
     }
   }
 
@@ -53,13 +56,12 @@ class PESViewer {
     try {
       const cached = localStorage.getItem(this.CACHE_KEY);
       if (cached) {
-        const { names, timestamp, folderIds } = JSON.parse(cached);
+        const { names, folderIds } = JSON.parse(cached);
         const currentFolders = this.driveAPI.folderIds.sort().join(',');
         const cachedFolders = (folderIds || []).sort().join(',');
 
-        // Use cache if same folders and not expired (24h)
-        if (cachedFolders === currentFolders &&
-            Date.now() - timestamp < this.CACHE_EXPIRY) {
+        // Use cache if same folders
+        if (cachedFolders === currentFolders && names && names.length > 0) {
           this.allFileNames = names;
           console.log(`Loaded ${names.length} file names from cache`);
           return true;
@@ -71,18 +73,47 @@ class PESViewer {
     return false;
   }
 
-  // Save file names to localStorage for instant loading next time
-  saveCacheFileNames() {
+  // Save file names to localStorage
+  saveCacheFileNames(fileCount, latestModified) {
     try {
       const cacheData = {
         names: this.allFileNames,
-        timestamp: Date.now(),
-        folderIds: this.driveAPI.folderIds
+        folderIds: this.driveAPI.folderIds,
+        fileCount: fileCount || this.allFileNames.length,
+        latestModified: latestModified || ''
       };
       localStorage.setItem(this.CACHE_KEY, JSON.stringify(cacheData));
       console.log(`Cached ${this.allFileNames.length} file names`);
     } catch (e) {
       console.error('Cache save error:', e);
+    }
+  }
+
+  // Check if Drive has changes and update cache if needed (background)
+  async checkAndUpdateCache() {
+    try {
+      const cached = localStorage.getItem(this.CACHE_KEY);
+      if (!cached) return;
+
+      const { fileCount, latestModified } = JSON.parse(cached);
+
+      // Quick API check - only fetches id + modifiedTime
+      const result = await this.driveAPI.checkForChanges(fileCount, latestModified);
+
+      if (result.changed) {
+        console.log('Drive has changes, updating cache...');
+        // Reload full file list
+        await this.driveAPI.loadAllFiles();
+        this.allFileNames = [...new Set(this.driveAPI.allFiles.map(f =>
+          f.name.replace(/\.(pes|emb)$/i, '')
+        ))].sort();
+        this.saveCacheFileNames(result.fileCount, result.latestModified);
+        this.showToast(`Đã cập nhật ${this.allFileNames.length} files`);
+      } else {
+        console.log('No changes detected');
+      }
+    } catch (error) {
+      console.error('Check changes error:', error);
     }
   }
 
@@ -104,8 +135,12 @@ class PESViewer {
         f.name.replace(/\.(pes|emb)$/i, '')
       ))].sort();
 
-      // Save to localStorage for instant loading next time
-      this.saveCacheFileNames();
+      // Get latest modified for change detection
+      const latestModified = this.driveAPI.allFiles.reduce((latest, f) =>
+        f.modifiedTime > latest ? f.modifiedTime : latest, '');
+
+      // Save to localStorage
+      this.saveCacheFileNames(this.driveAPI.allFiles.length, latestModified);
     } catch (error) {
       console.error('Preload error:', error);
     } finally {
