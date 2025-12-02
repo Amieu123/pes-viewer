@@ -336,12 +336,14 @@ class PESViewer {
         this.renderPage();
       }
 
-      // Update file names cache after search (background)
-      if (this.allFileNames.length === 0 && this.driveAPI.allFiles.length > 0) {
-        this.allFileNames = [...new Set(this.driveAPI.allFiles.map(f =>
-          f.name.replace(/\.(pes|emb)$/i, '')
-        ))].sort();
-        this.saveCacheFileNames();
+      // Add new file names from search results to cache
+      if (this.files.length > 0) {
+        const newNames = this.files.map(f => f.name);
+        const combined = new Set([...this.allFileNames, ...newNames]);
+        if (combined.size > this.allFileNames.length) {
+          this.allFileNames = [...combined].sort();
+          this.saveCacheFileNames();
+        }
       }
     } catch (error) {
       console.error('Search error:', error);
